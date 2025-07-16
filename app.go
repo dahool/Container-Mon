@@ -37,6 +37,7 @@ type config struct {
 	notifyWhenHealthy      bool
 	checkStoppedContainers bool
 	messagePrefix          string
+	checkContainerExitCode bool
 }
 
 func main() {
@@ -141,17 +142,10 @@ func isHealthy(ctx context.Context, cli *client.Client, c types.Container, conf 
 		}
 		// A stopped container is considered healthy only if its exit code is 0.
 		return containerJSON.State.ExitCode == 0
-	} else if err != nil {
-		return running
 	}
 
-	health := containerJSON.State.Health
-	if health == nil || health.Status == types.NoHealthcheck || health.Status == types.Starting {
-		return running
-	}
-
-	healthy := health.Status == types.Healthy
-	return healthy
+	// For any other container state (e.g., "created", "paused"), we consider it unhealthy.
+	return false
 }
 
 func getConfig() config {
