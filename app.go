@@ -131,8 +131,8 @@ func getContainers(ctx context.Context, cli *client.Client, filterByLabel bool, 
 
 func isHealthy(ctx context.Context, cli *client.Client, c types.Container, conf config) bool {
 	running := c.State == "running"
-	containerJSON, err := cli.ContainerInspect(ctx, c.ID)
 	
+	containerJSON, err := cli.ContainerInspect(ctx, c.ID)
 	if conf.checkContainerExitCode && c.State == "exited" {
 		// If the container is stopped ("exited"), we need to inspect it to get the exit code.
 		if err != nil {
@@ -142,10 +142,17 @@ func isHealthy(ctx context.Context, cli *client.Client, c types.Container, conf 
 		}
 		// A stopped container is considered healthy only if its exit code is 0.
 		return containerJSON.State.ExitCode == 0
+	} else if err != nil {
+		return running
 	}
 
-	// For any other container state (e.g., "created", "paused"), we consider it unhealthy.
-	return false
+	health := containerJSON.State.Health
+	if health == nil || health.Status == types.NoHealthcheck || health.Status == types.Starting {
+		return running
+	}
+
+	healthy := health.Status == types.Healthy
+	return healthy 	
 }
 
 func getConfig() config {
@@ -157,7 +164,7 @@ func getConfig() config {
 		notifyWhenHealthy:      getEnvBool(envNotifyWhenHealthy, true),
 		checkStoppedContainers: getEnvBool(envCheckStoppedContainers, true),
 		messagePrefix:          getEnv(envMessagePrefix, "", false),
-		checkContainerExitCode: getEnv(envCheckContainerExitCode, "", false),
+		checkContainerExitCode: getEnvBool(envCheckContainerExitCode, false),
 	}
 
 	fmt.Println("Using config:")
